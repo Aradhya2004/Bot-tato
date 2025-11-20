@@ -103,7 +103,26 @@ app.post('/chat', async (req: Request, res: Response): Promise<any> => {
                 .json({ error: 'User not found in database, please register' });
         }
 
-        // Send message to OpenAI GPT-4
+        // Fetch users past messages for context
+        const chatHistory = await db
+            .select()
+            .from(chats)
+            .where(eq(chats.userId, userId))
+            .orderBy(chats.createdAt)
+            .limit(10);
+
+        // Format chat history for Open AI
+        const conversation: ChatCompletionMessageParam[] = chatHistory.flatMap(
+            (chat) => [
+                { role: 'user', content: chat.message },
+                { role: 'assistant', content: chat.reply },
+            ]
+        );
+
+        // Add latest user messages to the conversation
+        conversation.push({ role: 'user', content: message });
+
+        // Send message to OpenAI GPT-3.5-turbo
         const response = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [{ role: 'user', content: message }]
@@ -134,10 +153,10 @@ app.post('/chat', async (req: Request, res: Response): Promise<any> => {
 });
 
 // Get chat history for a user
-app.post('/get-messages', async(req: Request, res: Response): Promise<any> => {
-    const {userId} = req.body;
+app.post('/get-messages', async (req: Request, res: Response): Promise<any> => {
+    const { userId } = req.body;
 
-    if(!userId){
+    if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
     }
 
@@ -146,11 +165,11 @@ app.post('/get-messages', async(req: Request, res: Response): Promise<any> => {
             .select()
             .from(chats)
             .where(eq(chats.userId, userId));
-        
+
         res.status(200).json({ messages: chatHistory });
     } catch (error) {
         console.log('Error fetching chat history', error);
-        res.status(500).json({error: 'Internal Server Error'})
+        res.status(500).json({ error: 'Internal Server Error' })
     }
 })
 
